@@ -1,0 +1,4 @@
+This project is an implementation of the book series "Raytracing in One Weekend" as found here: https://raytracing.github.io/
+
+It is being used as a learning exercise for the Odin Language (https://odin-lang.org/) and therefore not recommended to
+be seen as production code and is provided as-is with no warranties or guarantees, express or implied.
