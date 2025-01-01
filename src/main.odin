@@ -111,7 +111,17 @@ start_thread :: proc(data: ^Thread_Data) -> Maybe(^thread.Thread) {
     return nil
 }
 
-scene: []Hittable = {Sphere{center = {0, 0, -1}, radius = 0.5}, Sphere{center = {0, -100.5, -1}, radius = 100}}
+pink: Material = Lambertian{albedo = {0.8, 0.3, 0.3}}
+green: Material = Lambertian{albedo = {0.8, 0.8, 0.0}}
+metal1: Material = Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 1.0}
+metal2: Material = Metal{albedo = {0.8, 0.8, 0.8}, fuzz = 0.3}
+
+scene: []Hittable = {
+    Sphere{center = {0, 0, -1}, radius = 0.5, material = &pink},
+    Sphere{center = {0, -100.5, -1}, radius = 100, material = &green},
+    Sphere{center = {1, 0, -1}, radius = 0.5, material = &metal1},
+    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &metal2},
+}
 
 update :: proc(t: ^thread.Thread) {
 
@@ -124,7 +134,7 @@ update :: proc(t: ^thread.Thread) {
                 v := (f32(j) + rand.float32()) / HEIGHT
                 r := get_ray(data.camera, u, v)
                 p := point_at_parameter(r, 2.0)
-                col += colour(r, scene)
+                col += colour(r, scene, 0)
             }
             col /= f32(SAMPLES_PER_PIXEL)
             col = {math.sqrt(col.r), math.sqrt(col.g), math.sqrt(col.b)}
@@ -138,11 +148,17 @@ update :: proc(t: ^thread.Thread) {
     data.complete = true
 }
 
-colour :: proc(r: Ray, scene: []Hittable) -> Vec3 {
+colour :: proc(r: Ray, scene: []Hittable, depth: u8) -> Vec3 {
     rec: Hit_Record
     if hit_scene(scene, r, 0.001, math.F32_MAX, &rec) {
-        target := rec.p + rec.normal + random_vector_in_unit_sphere()
-        return 0.5 * colour({rec.p, target - rec.p}, scene)
+        scattered: Ray
+        attenuation: Vec3
+        if depth < 50 && scatter(rec.material^, r, rec, &attenuation, &scattered) {
+            return attenuation * colour(scattered, scene, depth + 1)
+        }
+        else {
+            return {}
+        }
     }
     else {
         unit_direction := unit_vector(r.direction)

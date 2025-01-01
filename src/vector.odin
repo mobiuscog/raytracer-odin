@@ -35,3 +35,7 @@ random_vector_in_unit_sphere :: proc() -> Vec3 {
     }
     return p
 }
+
+reflect :: proc(v: Vec3, n: Vec3) -> Vec3 {
+    return v - 2 * dot(v, n) * n
+}
