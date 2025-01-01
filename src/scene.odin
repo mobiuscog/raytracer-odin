@@ -9,20 +9,6 @@ Hit_Record :: struct {
     material: ^Material,
 }
 
-Material :: union {
-    Lambertian,
-    Metal,
-}
-
-Lambertian :: struct {
-    albedo: Vec3,
-}
-
-Metal :: struct {
-    albedo: Vec3,
-    fuzz: f32,
-}
-
 Hittable :: union {
     Sphere,
 }
@@ -78,23 +64,6 @@ hit_sphere :: proc(s: Sphere, r: Ray, t_min: f32, t_max: f32, rec: ^Hit_Record) 
             return true
         }
 
-    }
-    return false
-}
-
-scatter :: proc(material: Material, ray: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
-    switch &m in material {
-        case Lambertian:
-            target := rec.p + rec.normal + random_vector_in_unit_sphere()
-            scattered^ = Ray{rec.p, target - rec.p}
-            attenuation^ = m.albedo
-            return true
-        case Metal:
-            if m.fuzz > 1 do m.fuzz = 1
-            reflected := reflect(unit_vector(ray.direction), rec.normal)
-            scattered^ = Ray{rec.p, reflected + m.fuzz * random_vector_in_unit_sphere()}
-            attenuation^ = m.albedo
-            return dot(scattered.direction, rec.normal) > 0
     }
     return false
 }

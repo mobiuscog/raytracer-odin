@@ -113,14 +113,15 @@ start_thread :: proc(data: ^Thread_Data) -> Maybe(^thread.Thread) {
 
 pink: Material = Lambertian{albedo = {0.8, 0.3, 0.3}}
 green: Material = Lambertian{albedo = {0.8, 0.8, 0.0}}
-metal1: Material = Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 1.0}
-metal2: Material = Metal{albedo = {0.8, 0.8, 0.8}, fuzz = 0.3}
+metal: Material = Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 1.0}
+dielectric: Material = Dielectric{ref_idx = 1.5}
 
 scene: []Hittable = {
     Sphere{center = {0, 0, -1}, radius = 0.5, material = &pink},
     Sphere{center = {0, -100.5, -1}, radius = 100, material = &green},
-    Sphere{center = {1, 0, -1}, radius = 0.5, material = &metal1},
-    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &metal2},
+    Sphere{center = {1, 0, -1}, radius = 0.5, material = &metal},
+    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &dielectric},
+    Sphere{center = {-1, 0, -1}, radius = -0.45, material = &dielectric},
 }
 
 update :: proc(t: ^thread.Thread) {
