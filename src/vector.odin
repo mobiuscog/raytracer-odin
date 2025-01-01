@@ -1,6 +1,7 @@
 package raytracer
 
 import "core:math/linalg"
+import "core:math/rand"
 
 Vec3 :: [3]f32
 
@@ -22,4 +23,15 @@ squared_length :: proc(v: Vec3) -> f32 {
 
 unit_vector :: proc(v: Vec3) -> Vec3 {
     return linalg.normalize(v)
+}
+
+random_vector_in_unit_sphere :: proc() -> Vec3 {
+    p: Vec3
+    for {
+        p = 2.0 * {rand.float32(), rand.float32(), rand.float32()} - {1, 1, 1}
+        if squared_length(p) < 1.0 {
+            break
+        }
+    }
+    return p
 }

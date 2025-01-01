@@ -1,17 +1,15 @@
 package raytracer
 
 import rl "vendor:raylib"
-import "core:fmt"
 import "core:log"
 import "core:math"
 import "core:math/rand"
-import "core:mem"
 import "core:thread"
 
 WIDTH :: 800
 HEIGHT :: 400
 SAMPLES_PER_PIXEL :: 100
-NUM_THREADS :: 8
+NUM_THREADS :: 16
 
 Colour :: [4]u8
 
@@ -129,7 +127,7 @@ update :: proc(t: ^thread.Thread) {
                 col += colour(r, scene)
             }
             col /= f32(SAMPLES_PER_PIXEL)
-
+            col = {math.sqrt(col.r), math.sqrt(col.g), math.sqrt(col.b)}
             ir := u8(255.99 * col.r)
             ig := u8(255.99 * col.g)
             ib := u8(255.99 * col.b)
@@ -142,8 +140,9 @@ update :: proc(t: ^thread.Thread) {
 
 colour :: proc(r: Ray, scene: []Hittable) -> Vec3 {
     rec: Hit_Record
-    if hit_scene(scene, r, 0, math.F32_MAX, &rec) {
-        return 0.5 * (rec.normal + 1)
+    if hit_scene(scene, r, 0.001, math.F32_MAX, &rec) {
+        target := rec.p + rec.normal + random_vector_in_unit_sphere()
+        return 0.5 * colour({rec.p, target - rec.p}, scene)
     }
     else {
         unit_direction := unit_vector(r.direction)
