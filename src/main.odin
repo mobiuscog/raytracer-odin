@@ -151,7 +151,7 @@ update :: proc(t: ^thread.Thread) {
 
 colour :: proc(r: Ray, scene: []Hittable, depth: u8) -> Vec3 {
     rec: Hit_Record
-    if hit_scene(scene, r, 0.001, math.F32_MAX, &rec) {
+    if hit(scene, r, 0.001, math.F32_MAX, &rec) {
         scattered: Ray
         attenuation: Vec3
         if depth < 50 && scatter(rec.material^, r, rec, &attenuation, &scattered) {
