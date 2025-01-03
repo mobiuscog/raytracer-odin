@@ -1,5 +1,6 @@
 package raytracer
 
+import "core:math"
 import "core:math/linalg"
 import "core:math/rand"
 
@@ -36,3 +37,8 @@ random_vector_in_unit_sphere :: proc() -> Vec3 {
     return p
 }
 
+sqrt_vector :: proc "contextless" (v: ^Vec3) {
+    v.x = math.sqrt(v.x)
+    v.y = math.sqrt(v.y)
+    v.z = math.sqrt(v.z)
+}

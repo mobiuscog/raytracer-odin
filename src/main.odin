@@ -1,6 +1,7 @@
 package raytracer
 
 import rl "vendor:raylib"
+import "base:intrinsics"
 import "core:log"
 import "core:math"
 import "core:math/rand"
@@ -11,14 +12,12 @@ HEIGHT :: 400
 SAMPLES_PER_PIXEL :: 100
 NUM_THREADS :: 16
 
-Colour :: [4]u8
-
-buffer := [WIDTH * HEIGHT]Colour{}
+buffer := [WIDTH * HEIGHT][3]u8{}
 
 Thread_Data :: struct {
     offset: int,
     camera: Camera,
-    buffer: []Colour,
+    buffer: [][3]u8,
     complete: bool,
     thread: ^thread.Thread
 }
@@ -41,7 +40,7 @@ main :: proc() {
 
     // Setup texture to draw on
     image := rl.GenImageColor(WIDTH, HEIGHT, rl.RED)
-    rl.ImageFormat(&image, .UNCOMPRESSED_R8G8B8A8)
+    rl.ImageFormat(&image, .UNCOMPRESSED_R8G8B8)
     texture := rl.LoadTextureFromImage(image)
     rl.UnloadImage(image)
 
@@ -116,12 +115,15 @@ green: Material = Lambertian{albedo = {0.8, 0.8, 0.0}}
 metal: Material = Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 1.0}
 dielectric: Material = Dielectric{ref_idx = 1.5}
 
-scene: []Hittable = {
+spheres: []Sphere = {
     Sphere{center = {0, 0, -1}, radius = 0.5, material = &pink},
     Sphere{center = {0, -100.5, -1}, radius = 100, material = &green},
     Sphere{center = {1, 0, -1}, radius = 0.5, material = &metal},
     Sphere{center = {-1, 0, -1}, radius = 0.5, material = &dielectric},
     Sphere{center = {-1, 0, -1}, radius = -0.45, material = &dielectric},
+}
+scene: Scene = {
+    spheres,
 }
 
 update :: proc(t: ^thread.Thread) {
@@ -129,33 +131,29 @@ update :: proc(t: ^thread.Thread) {
     data := (^Thread_Data)(t.data)
     for j := HEIGHT - 1 - data.offset; j >= 0; j -= NUM_THREADS {
         for i in 0..<WIDTH {
-            col := Vec3{}
+            col := colour()
             for s in 0..<SAMPLES_PER_PIXEL {
                 u := (f32(i) + rand.float32()) / WIDTH
                 v := (f32(j) + rand.float32()) / HEIGHT
                 r := get_ray(data.camera, u, v)
-                p := point_at_parameter(r, 2.0)
-                col += colour(r, scene, 0)
+                col += sample_colour(r, scene, 0)
             }
-            col /= f32(SAMPLES_PER_PIXEL)
-            col = {math.sqrt(col.r), math.sqrt(col.g), math.sqrt(col.b)}
-            ir := u8(255.99 * col.r)
-            ig := u8(255.99 * col.g)
-            ib := u8(255.99 * col.b)
-
-            data.buffer[j * WIDTH + i] = {ir, ig, ib, 255}
+            col /= SAMPLES_PER_PIXEL
+            sqrt_colour(&col)
+            col_u8 := to_u8(col)
+            data.buffer[j * WIDTH + i] = col_u8
         }
     }
     data.complete = true
 }
 
-colour :: proc(r: Ray, scene: []Hittable, depth: u8) -> Vec3 {
+sample_colour :: proc(r: Ray, scene: Scene, depth: u8) -> Vec3 {
     rec: Hit_Record
-    if hit(scene, r, 0.001, math.F32_MAX, &rec) {
+    if hit_scene(scene, r, 0.001, math.F32_MAX, &rec) {
         scattered: Ray
         attenuation: Vec3
         if depth < 50 && scatter(rec.material^, r, rec, &attenuation, &scattered) {
-            return attenuation * colour(scattered, scene, depth + 1)
+            return attenuation * sample_colour(scattered, scene, depth + 1)
         }
         else {
             return {}
@@ -166,4 +164,14 @@ colour :: proc(r: Ray, scene: []Hittable, depth: u8) -> Vec3 {
         t := 0.5 * (unit_direction.y + 1.0)
         return (1.0 - t) * Vec3{1.0, 1.0, 1.0} + t * Vec3{0.5, 0.7, 1.0}
     }
+}
+
+// More to practice generics than being 'good' code
+// The returned array is in passed back in the stack frame as it's small enough and known size, so no need to dynamically
+// allocate memory
+to_u8 :: proc "contextless" (a: [$N]$E) -> (b: [N]u8) where intrinsics.type_is_float(E) {
+    for i in 0..<N {
+        b[i] = u8(255.99 * a[i])
+    }
+    return b
 }

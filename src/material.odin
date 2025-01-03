@@ -1,6 +1,27 @@
 package raytracer
 
+import "core:math"
 import "core:math/rand"
+
+Colour :: [3]f32
+
+colour :: proc() -> Colour {
+    return colour_f32()
+}
+
+colour_u8 :: proc(r: u8 = 0, g: u8 = 0, b: u8 = 0) -> Colour {
+    return Colour {f32(r) * 0xff, f32(g) * 0xff, f32(b) * 0xff}
+}
+
+colour_f32 :: proc(r: f32 = 0, g: f32 = 0, b: f32 = 0) -> Colour {
+    return Colour {r, g, b}
+}
+
+sqrt_colour :: proc "contextless" (v: ^Colour) {
+    v.r = math.sqrt(v.r)
+    v.g = math.sqrt(v.g)
+    v.b = math.sqrt(v.b)
+}
 
 Material :: union {
     Lambertian,
