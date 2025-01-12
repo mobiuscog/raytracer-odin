@@ -1,6 +1,5 @@
 package raytracer
 
-import "core:log"
 import "core:math"
 import "core:math/rand"
 
@@ -24,8 +23,8 @@ Sphere :: struct {
 }
 
 scene_build :: proc() -> Scene {
-    spheres := make([dynamic]Sphere, 576)
-    materials := make([dynamic]Material, 576)
+    spheres := make([dynamic]Sphere, 576, context.temp_allocator)
+    materials := make([dynamic]Material, 576, context.temp_allocator)
 
     sphere_material: Material = Material_Lambertian{{0.5, 0.5, 0.5}}
     append(&materials, sphere_material)

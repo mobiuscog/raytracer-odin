@@ -3,13 +3,12 @@ package raytracer
 import rl "vendor:raylib"
 import "base:intrinsics"
 import "core:log"
-import "core:math/rand"
 import "core:thread"
 import "core:math"
 
 WIDTH :: 800
 ASPECT_RATIO :: f64(16)/f64(9)
-SAMPLES_PER_PIXEL :: 100
+SAMPLES_PER_PIXEL :: 20
 NUM_THREADS :: 16
 
 buffer := [dynamic][3]u8{}
@@ -24,17 +23,13 @@ Thread_Data :: struct {
 }
 
 main :: proc() {
-    // Seed the RNG
-    rand.reset(42)
-
     // Setup the logging
     logger := log.create_console_logger()
     context.logger = logger
     defer log.destroy_console_logger(logger)
 
     camera := camera_default(WIDTH, ASPECT_RATIO)
-    buffer = make([dynamic][3]u8, camera.image_width * camera.image_height)
-    defer delete(buffer)
+    buffer = make([dynamic][3]u8, camera.image_width * camera.image_height, context.temp_allocator)
 
     // Initialise Window
     rl.SetConfigFlags({.WINDOW_RESIZABLE})
@@ -70,6 +65,7 @@ main :: proc() {
     }
 
     complete := false
+    freed := false
 
     // Render
     for !rl.WindowShouldClose() {
@@ -77,7 +73,10 @@ main :: proc() {
         defer rl.EndDrawing()
 
         rl.ClearBackground(rl.BLACK)
-        rl.UpdateTexture(texture, raw_data(buffer)) // We have to use raw_data(...) to get a pointer to the actual data
+
+        if !complete {
+            rl.UpdateTexture(texture, raw_data(buffer)) // We have to use raw_data(...) to get a pointer to the actual data
+        }
 
         // We need to invert the source rect to follow the book.
         rl.DrawTexture(texture, 0, 0, rl.WHITE)
@@ -100,6 +99,10 @@ main :: proc() {
                 complete = true
                 end_time := rl.GetTime()
                 log.info("All threads completed after:", end_time - start_time, "seconds.")
+                if !freed {
+                    freed = true
+                    free_all(context.temp_allocator)
+                }
             }
         }
     }

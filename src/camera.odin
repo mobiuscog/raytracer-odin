@@ -1,6 +1,5 @@
 package raytracer
 
-import "core:log"
 import "core:math/rand"
 import "core:math"
 
