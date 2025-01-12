@@ -9,6 +9,14 @@ colour_black :: proc() -> Colour {
     return colour_f64()
 }
 
+colour_random :: proc() -> Colour {
+    return colour_f64(rand.float64(), rand.float64(), rand.float64())
+}
+
+colour_random_range :: proc(min: f64, max: f64) -> Colour {
+    return colour_f64(rand.float64_range(min, max), rand.float64_range(min, max), rand.float64_range(min, max))
+}
+
 colour_u8 :: proc(r: u8 = 0, g: u8 = 0, b: u8 = 0) -> Colour {
     return Colour {f64(r) * 0xff, f64(g) * 0xff, f64(b) * 0xff}
 }

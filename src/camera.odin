@@ -28,12 +28,12 @@ camera_default :: proc(width: int, aspect_ratio: f64) -> Camera {
 
     // Determine viewport dimensions
     vfov:f64 = 20
-    look_from := Point3{-2, 2, 1}
-    look_at := Point3{0, 0, -1}
+    look_from := Point3{13, 2, 3}
+    look_at := Point3{0, 0, 0}
     v_up := Vec3{0, 1, 0}
 
-    defocus_angle := f64(10)
-    focus_dist := f64(3.4)
+    defocus_angle := f64(0.6)
+    focus_dist := f64(10.0)
 
     center := look_from
 

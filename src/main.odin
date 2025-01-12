@@ -16,6 +16,7 @@ buffer := [dynamic][3]u8{}
 
 Thread_Data :: struct {
     offset: int,
+    scene: Scene,
     camera: Camera,
     buffer: ^[dynamic][3]u8,
     complete: bool,
@@ -48,6 +49,7 @@ main :: proc() {
     texture := rl.LoadTextureFromImage(image)
     rl.UnloadImage(image)
 
+    scene := scene_build()
 
     // Start timer
     start_time := rl.GetTime()
@@ -57,7 +59,7 @@ main :: proc() {
     threads := [NUM_THREADS]Maybe(^thread.Thread){}
     thread_data := [NUM_THREADS]Thread_Data{}
     for i in 0..<NUM_THREADS {
-        thread_data[i] = Thread_Data{i, camera, &buffer, false, nil}
+        thread_data[i] = Thread_Data{i, scene, camera, &buffer, false, nil}
         // Try to start a thread, returning the value and ok==true if success
         if started, ok := start_thread(&thread_data[i]).?; ok {
             threads[i] = started
@@ -119,20 +121,10 @@ METAL: Material = Material_Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 0.9}
 GLASS: Material = Material_Dielectric{ref_idx = 1.5}
 AIR: Material = Material_Dielectric{ref_idx = 1.0 / 1.5}
 
-spheres: []Sphere = {
-    Sphere{center = {0, 0, -1}, radius = 0.5, material = &BLUE},
-    Sphere{center = {0, -100.5, -1}, radius = 100, material = &GREEN},
-    Sphere{center = {1, 0, -1}, radius = 0.5, material = &METAL},
-    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &GLASS},
-    Sphere{center = {-1, 0, -1}, radius = 0.2, material = &AIR},
-}
-scene: Scene = {
-    spheres,
-}
-
 update :: proc(t: ^thread.Thread) {
 
     data := (^Thread_Data)(t.data)
+    scene := data.scene
     camera := data.camera
     for j := data.offset; j < camera.image_height; j += NUM_THREADS {
         for i in 0..<WIDTH {
