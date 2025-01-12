@@ -3,105 +3,103 @@ package raytracer
 import "core:math"
 import "core:math/rand"
 
-Colour :: [3]f32
+Colour :: [3]f64
 
-colour :: proc() -> Colour {
-    return colour_f32()
+colour_black :: proc() -> Colour {
+    return colour_f64()
 }
 
 colour_u8 :: proc(r: u8 = 0, g: u8 = 0, b: u8 = 0) -> Colour {
-    return Colour {f32(r) * 0xff, f32(g) * 0xff, f32(b) * 0xff}
+    return Colour {f64(r) * 0xff, f64(g) * 0xff, f64(b) * 0xff}
 }
 
-colour_f32 :: proc(r: f32 = 0, g: f32 = 0, b: f32 = 0) -> Colour {
+colour_f64 :: proc(r: f64 = 0, g: f64 = 0, b: f64 = 0) -> Colour {
     return Colour {r, g, b}
 }
 
-sqrt_colour :: proc "contextless" (v: ^Colour) {
-    v.r = math.sqrt(v.r)
-    v.g = math.sqrt(v.g)
-    v.b = math.sqrt(v.b)
+colour_linear_to_gamma_component :: proc "contextless" (linear_component: f64) -> f64 {
+    if linear_component > 0 {
+        return math.sqrt(linear_component)
+    }
+    return 0
+}
+
+colour_linear_to_gamma :: proc "contextless" (v: ^Colour) {
+    v.r = colour_linear_to_gamma_component(v.r)
+    v.g = colour_linear_to_gamma_component(v.g)
+    v.b = colour_linear_to_gamma_component(v.b)
 }
 
 Material :: union {
-    Lambertian,
-    Metal,
-    Dielectric,
+    Material_Lambertian,
+    Material_Metal,
+    Material_Dielectric,
 }
 
-Lambertian :: struct {
+Material_Lambertian :: struct {
     albedo: Vec3,
 }
 
-Metal :: struct {
+Material_Metal :: struct {
     albedo: Vec3,
-    fuzz: f32,
+    fuzz: f64,
 }
 
-Dielectric :: struct {
-    ref_idx: f32
+Material_Dielectric :: struct {
+    ref_idx: f64
 }
 
-scatter :: proc(material: Material, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
+material_scatter :: proc(material: Material, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
     switch &m in material {
-    case Lambertian:
-        return scatter_lambertian(m, r, rec, attenuation, scattered)
-    case Metal:
-        return scatter_metal(m, r, rec, attenuation, scattered)
-    case Dielectric:
-        return scatter_dielectric(m, r, rec, attenuation, scattered)
+    case Material_Lambertian:
+        return lambertian_scatter(m, r, rec, attenuation, scattered)
+    case Material_Metal:
+        return metal_scatter(m, r, rec, attenuation, scattered)
+    case Material_Dielectric:
+        return dielectric_scatter(m, r, rec, attenuation, scattered)
     }
     return false
 }
 
-scatter_lambertian :: proc(m: Lambertian, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
-    target := rec.p + rec.normal + random_vector_in_unit_sphere()
-    scattered^ = Ray{rec.p, target - rec.p}
+lambertian_scatter :: proc(m: Material_Lambertian, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
+    scatter_direction := rec.normal + vector_random()
+
+    // Catch degenerate scatters
+    if vector_near_zero(scatter_direction) {
+        scatter_direction = rec.normal
+    }
+    scattered^ = Ray{rec.p, scatter_direction}
     attenuation^ = m.albedo
     return true
 }
 
-scatter_metal :: proc(m: Metal, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
+metal_scatter :: proc(m: Material_Metal, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
     m := m
     if m.fuzz > 1 do m.fuzz = 1
-    reflected := reflect(unit_vector(r.direction), rec.normal)
-    scattered^ = Ray{rec.p, reflected + m.fuzz * random_vector_in_unit_sphere()}
+    reflected := ray_reflect(vector_unit(r.direction), rec.normal)
+    scattered^ = Ray{rec.p, reflected + m.fuzz * vector_random_unit()}
     attenuation^ = m.albedo
-    return dot(scattered.direction, rec.normal) > 0
+    return true
 }
 
-scatter_dielectric :: proc(m: Dielectric, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
-    outward_normal: Vec3
-    reflected := reflect(r.direction, rec.normal)
-    ni_over_nt: f32
-    attenuation^ = Vec3{1.0, 1.0, 1.0}
-    refracted: Vec3
-    reflect_prob: f32
-    cosine: f32
+dielectric_scatter :: proc(m: Material_Dielectric, r: Ray, rec: Hit_Record, attenuation: ^Vec3, scattered: ^Ray) -> bool {
+    attenuation^ = Colour{1.0, 1.0, 1.0}
+    ri := rec.is_front_face ? (1.0 / m.ref_idx) : m.ref_idx
 
-    if dot(r.direction, rec.normal) > 0 {
-        outward_normal = -rec.normal
-        ni_over_nt = m.ref_idx
-        cosine = m.ref_idx * dot(r.direction, rec.normal) / length(r.direction)
+    unit_direction := vector_unit(r.direction)
+    cos_theta := min(vector_dot(-unit_direction, rec.normal), 1)
+    sin_theta := math.sqrt(1 - cos_theta * cos_theta)
+
+    cannot_refract := ri * sin_theta > 1
+    direction: Vec3
+
+    if cannot_refract || ray_reflectance(cos_theta, ri) > rand.float64() {
+        direction = ray_reflect(unit_direction, rec.normal)
     }
     else {
-        outward_normal = rec.normal
-        ni_over_nt = 1.0 / m.ref_idx
-        cosine = -dot(r.direction, rec.normal) / length(r.direction)
+        direction = ray_refract(unit_direction, rec.normal, ri)
     }
 
-    if refract(r.direction, outward_normal, ni_over_nt, &refracted) {
-        reflect_prob = schlick(cosine, m.ref_idx)
-    }
-    else {
-        reflect_prob = 1.0
-    }
-
-    if rand.float32() < reflect_prob {
-        scattered^ = Ray{rec.p, reflected}
-    }
-    else {
-        scattered^ = Ray{rec.p, refracted}
-    }
-    return true
+    scattered^ = Ray{rec.p, direction}
+    return true;
 }

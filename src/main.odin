@@ -3,21 +3,21 @@ package raytracer
 import rl "vendor:raylib"
 import "base:intrinsics"
 import "core:log"
-import "core:math"
 import "core:math/rand"
 import "core:thread"
+import "core:math"
 
 WIDTH :: 800
-HEIGHT :: 400
+ASPECT_RATIO :: f64(16)/f64(9)
 SAMPLES_PER_PIXEL :: 100
 NUM_THREADS :: 16
 
-buffer := [WIDTH * HEIGHT][3]u8{}
+buffer := [dynamic][3]u8{}
 
 Thread_Data :: struct {
     offset: int,
     camera: Camera,
-    buffer: [][3]u8,
+    buffer: ^[dynamic][3]u8,
     complete: bool,
     thread: ^thread.Thread
 }
@@ -31,20 +31,23 @@ main :: proc() {
     context.logger = logger
     defer log.destroy_console_logger(logger)
 
+    camera := camera_default(WIDTH, ASPECT_RATIO)
+    buffer = make([dynamic][3]u8, camera.image_width * camera.image_height)
+    defer delete(buffer)
 
     // Initialise Window
     rl.SetConfigFlags({.WINDOW_RESIZABLE})
-    rl.InitWindow(WIDTH, HEIGHT, "Raytracer")
+    log.info("Window width:", camera.image_width, "height:", camera.image_height)
+    rl.InitWindow(i32(camera.image_width), i32(camera.image_height), "Raytracer")
     defer rl.CloseWindow()
     rl.SetTargetFPS(60)
 
     // Setup texture to draw on
-    image := rl.GenImageColor(WIDTH, HEIGHT, rl.RED)
+    image := rl.GenImageColor(i32(camera.image_width), i32(camera.image_height), rl.RED)
     rl.ImageFormat(&image, .UNCOMPRESSED_R8G8B8)
     texture := rl.LoadTextureFromImage(image)
     rl.UnloadImage(image)
 
-    camera := default_camera()
 
     // Start timer
     start_time := rl.GetTime()
@@ -54,7 +57,7 @@ main :: proc() {
     threads := [NUM_THREADS]Maybe(^thread.Thread){}
     thread_data := [NUM_THREADS]Thread_Data{}
     for i in 0..<NUM_THREADS {
-        thread_data[i] = Thread_Data{i, camera, buffer[:], false, nil}
+        thread_data[i] = Thread_Data{i, camera, &buffer, false, nil}
         // Try to start a thread, returning the value and ok==true if success
         if started, ok := start_thread(&thread_data[i]).?; ok {
             threads[i] = started
@@ -72,10 +75,10 @@ main :: proc() {
         defer rl.EndDrawing()
 
         rl.ClearBackground(rl.BLACK)
-        rl.UpdateTexture(texture, &buffer)
+        rl.UpdateTexture(texture, raw_data(buffer)) // We have to use raw_data(...) to get a pointer to the actual data
 
         // We need to invert the source rect to follow the book.
-        rl.DrawTextureRec(texture, {0, 0, WIDTH, -HEIGHT}, {}, rl.WHITE)
+        rl.DrawTexture(texture, 0, 0, rl.WHITE)
 
         if !complete {
             unfinished := 0
@@ -110,17 +113,18 @@ start_thread :: proc(data: ^Thread_Data) -> Maybe(^thread.Thread) {
     return nil
 }
 
-pink: Material = Lambertian{albedo = {0.8, 0.3, 0.3}}
-green: Material = Lambertian{albedo = {0.8, 0.8, 0.0}}
-metal: Material = Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 1.0}
-dielectric: Material = Dielectric{ref_idx = 1.5}
+BLUE : Material = Material_Lambertian{albedo = {0.1, 0.2, 0.5}}
+GREEN: Material = Material_Lambertian{albedo = {0.8, 0.8, 0.0}}
+METAL: Material = Material_Metal{albedo = {0.8, 0.6, 0.2}, fuzz = 0.9}
+GLASS: Material = Material_Dielectric{ref_idx = 1.5}
+AIR: Material = Material_Dielectric{ref_idx = 1.0 / 1.5}
 
 spheres: []Sphere = {
-    Sphere{center = {0, 0, -1}, radius = 0.5, material = &pink},
-    Sphere{center = {0, -100.5, -1}, radius = 100, material = &green},
-    Sphere{center = {1, 0, -1}, radius = 0.5, material = &metal},
-    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &dielectric},
-    Sphere{center = {-1, 0, -1}, radius = -0.45, material = &dielectric},
+    Sphere{center = {0, 0, -1}, radius = 0.5, material = &BLUE},
+    Sphere{center = {0, -100.5, -1}, radius = 100, material = &GREEN},
+    Sphere{center = {1, 0, -1}, radius = 0.5, material = &METAL},
+    Sphere{center = {-1, 0, -1}, radius = 0.5, material = &GLASS},
+    Sphere{center = {-1, 0, -1}, radius = 0.4, material = &AIR},
 }
 scene: Scene = {
     spheres,
@@ -129,49 +133,53 @@ scene: Scene = {
 update :: proc(t: ^thread.Thread) {
 
     data := (^Thread_Data)(t.data)
-    for j := HEIGHT - 1 - data.offset; j >= 0; j -= NUM_THREADS {
+    camera := data.camera
+    for j := data.offset; j < camera.image_height; j += NUM_THREADS {
         for i in 0..<WIDTH {
-            col := colour()
+            pixel_center := camera.upper_left_location + (f64(i) * camera.pixel_delta_u) + (f64(j) * camera.pixel_delta_v)
+            ray_direction := pixel_center - camera.camera_center
+            ray := Ray{camera.camera_center, ray_direction}
+            colour := colour_black()
             for s in 0..<SAMPLES_PER_PIXEL {
-                u := (f32(i) + rand.float32()) / WIDTH
-                v := (f32(j) + rand.float32()) / HEIGHT
-                r := get_ray(data.camera, u, v)
-                col += sample_colour(r, scene, 0)
+                r := camera_generate_ray(camera, i, j)
+                colour += ray_colour(r, camera.max_depth, scene)
             }
-            col /= SAMPLES_PER_PIXEL
-            sqrt_colour(&col)
-            col_u8 := to_u8(col)
+            colour /= SAMPLES_PER_PIXEL
+            colour_linear_to_gamma(&colour)
+            col_u8 := to_u8(colour)
+            r := f64(i) / (WIDTH - 1)
+            g := f64(j) / (f64(data.camera.image_height) - 1)
+
             data.buffer[j * WIDTH + i] = col_u8
         }
     }
     data.complete = true
 }
 
-sample_colour :: proc(r: Ray, scene: Scene, depth: u8) -> Vec3 {
+ray_colour :: proc(ray: Ray, depth: int, scene: Scene) -> Colour {
+    if depth <= 0 do return colour_black()
     rec: Hit_Record
-    if hit_scene(scene, r, 0.001, math.F32_MAX, &rec) {
+    if scene_hit(scene, ray, Interval{0.001, math.INF_F64}, &rec) {
         scattered: Ray
-        attenuation: Vec3
-        if depth < 50 && scatter(rec.material^, r, rec, &attenuation, &scattered) {
-            return attenuation * sample_colour(scattered, scene, depth + 1)
+        attenuation: Colour
+        if material_scatter(rec.material^, ray, rec, &attenuation, &scattered) {
+            return attenuation * ray_colour(scattered, depth - 1, scene)
         }
-        else {
-            return {}
-        }
+        return colour_black()
     }
-    else {
-        unit_direction := unit_vector(r.direction)
-        t := 0.5 * (unit_direction.y + 1.0)
-        return (1.0 - t) * Vec3{1.0, 1.0, 1.0} + t * Vec3{0.5, 0.7, 1.0}
-    }
+    unit_direction := vector_unit(ray.direction)
+    a := 0.5 * (unit_direction.y + 1.0)
+    return (1 - a) * colour_f64(1, 1, 1) + a * colour_f64(0.5, 0.7, 1.0)
+
 }
 
 // More to practice generics than being 'good' code
 // The returned array is in passed back in the stack frame as it's small enough and known size, so no need to dynamically
 // allocate memory
-to_u8 :: proc "contextless" (a: [$N]$E) -> (b: [N]u8) where intrinsics.type_is_float(E) {
+to_u8 :: proc(a: [$N]$E) -> (b: [N]u8) where intrinsics.type_is_float(E) {
+    intensity := Interval{0.000, 0.999}
     for i in 0..<N {
-        b[i] = u8(255.99 * a[i])
+        b[i] = u8(256 * interval_clamp(intensity, a[i]))
     }
     return b
 }
