@@ -124,7 +124,7 @@ spheres: []Sphere = {
     Sphere{center = {0, -100.5, -1}, radius = 100, material = &GREEN},
     Sphere{center = {1, 0, -1}, radius = 0.5, material = &METAL},
     Sphere{center = {-1, 0, -1}, radius = 0.5, material = &GLASS},
-    Sphere{center = {-1, 0, -1}, radius = 0.4, material = &AIR},
+    Sphere{center = {-1, 0, -1}, radius = 0.2, material = &AIR},
 }
 scene: Scene = {
     spheres,
@@ -137,8 +137,8 @@ update :: proc(t: ^thread.Thread) {
     for j := data.offset; j < camera.image_height; j += NUM_THREADS {
         for i in 0..<WIDTH {
             pixel_center := camera.upper_left_location + (f64(i) * camera.pixel_delta_u) + (f64(j) * camera.pixel_delta_v)
-            ray_direction := pixel_center - camera.camera_center
-            ray := Ray{camera.camera_center, ray_direction}
+            ray_direction := pixel_center - camera.center
+            ray := Ray{camera.center, ray_direction}
             colour := colour_black()
             for s in 0..<SAMPLES_PER_PIXEL {
                 r := camera_generate_ray(camera, i, j)
