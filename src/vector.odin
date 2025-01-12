@@ -55,6 +55,15 @@ vector_random_on_hemisphere :: proc(normal: Vec3) -> Vec3 {
     return -on_unit_sphere
 }
 
+vector_random_in_unit_disk :: proc() -> Vec3 {
+    for {
+        p := Vec3{rand.float64_range(-1, 1), rand.float64_range(-1, 1), 0}
+        if vector_squared_length(p) < 1 {
+            return p
+        }
+    }
+}
+
 vector_sqrt :: proc "contextless" (v: ^Vec3) {
     v.x = math.sqrt(v.x)
     v.y = math.sqrt(v.y)
